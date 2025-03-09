@@ -55,11 +55,14 @@
 // vary the heading a little bit, in % of total circle
 #define ANT_HEADING_VARIANCE 50
 
+// in pixels, from the edge
+#define BOUNDING_BOX_PADDING 20
+
 
 typedef struct Ant {
     Vector2 position;
     Vector2 velocity;
-    
+
     // TODO should this be here? all the ants want some noise,
     // but one per ant? and on every single struct? Hmm...
     // maybe only make so Generator, and  randomly give them out with batching
@@ -116,6 +119,13 @@ int main(void) {
     ant_spawner.position.x = WIDTH  / 2;
     ant_spawner.position.y = HEIGHT / 2;
 
+    Rectangle bounding_box = {
+        BOUNDING_BOX_PADDING,
+        BOUNDING_BOX_PADDING,
+        WIDTH - BOUNDING_BOX_PADDING*2,
+        HEIGHT - BOUNDING_BOX_PADDING*2
+    };
+
 
     // TODO make spawner spawn
     for (size_t i = 0; i < NUM_ANTS; i++) {
@@ -153,14 +163,14 @@ int main(void) {
             Vector2 u = ant->velocity;
 
             // repel ants from the edge
-            if (s0.x < 0)      { a.x += ANT_SPEED; }
-            if (s0.x > WIDTH)  { a.x -= ANT_SPEED; }
-            if (s0.y < 0)      { a.y += ANT_SPEED; }
-            if (s0.y > HEIGHT) { a.y -= ANT_SPEED; }
+            if (s0.x                  < bounding_box.x)      { a.x += ANT_SPEED; }
+            if (s0.x + bounding_box.x > bounding_box.width)  { a.x -= ANT_SPEED; }
+            if (s0.y                  < bounding_box.y)      { a.y += ANT_SPEED; }
+            if (s0.y + bounding_box.y > bounding_box.height) { a.y -= ANT_SPEED; }
 
             // give the ants some movement in the direction their already going, 
             float heading = atan2(u.y, u.x);
-            heading += random_noise * PI * (ANT_HEADING_VARIANCE/100);
+            heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
             a += Vector2AngleToVector(heading) * ANT_SPEED;
 
             // add some drag force!
