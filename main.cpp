@@ -9,6 +9,18 @@
 // #include "hashmap.h"
 #include "dynamic_array.h"
 
+#include "noise.cpp"
+
+
+
+// TODO refactor for this
+// 10 meters for every pixel, to be changed when you zoom the camera or something
+#define METER_TO_PIXEL 0.1
+#define PIXEL_TO_METER 10
+
+// TODO
+// check out the camera Stuct
+// Camera2D camera = {};
 
 
 #define FACTOR 60
@@ -31,19 +43,27 @@
 // Image from Freeimages.com
 #define ANT_ART "Ant_clip_art_small.png"
 
+
 // TODO change pixels per second to meters per second
 // in pixels per second
-#define ANT_MAX_SPEED 100
+#define ANT_SPEED 100
 
+// how much the previous velocity is negated every second.
+// aka it add a backwards vector to the acceleration
+#define ANT_DRAG 0.9
 
-#define VEC2_Fmt "(%.2f, %.2f)"
-#define VEC2_Arg(vec2) vec2.x, vec2.y
-// Example: printf("my_vec = "VEC2_Fmt"\n", VEC2_Arg(my_vec));
+// vary the heading a little bit, in % of total circle
+#define ANT_HEADING_VARIANCE 50
 
 
 typedef struct Ant {
     Vector2 position;
     Vector2 velocity;
+    
+    // TODO should this be here? all the ants want some noise,
+    // but one per ant? and on every single struct? Hmm...
+    // maybe only make so Generator, and  randomly give them out with batching
+    NoiseGenerator noise;
 } Ant;
 
 // thing that spawns ants, up to NUM_ANTS or something
@@ -51,17 +71,17 @@ typedef struct Ant_Spawner {
     Ant *items;
     u64 count;
     u64 capacity;
-
+    
     // where the spawner is located at
     Vector2 position;
 } Ant_Spawner;
 
 
-// Return a random float between 0 and 1
-float randf(void) {
-    return (float) rand() / (float) RAND_MAX;
-}
+#define VEC2_Fmt "(%.2f, %.2f)"
+#define VEC2_Arg(vec2) vec2.x, vec2.y
+// Example: printf("my_vec = "VEC2_Fmt"\n", VEC2_Arg(my_vec));
 
+// angle in RAD to Unit vector
 Vector2 Vector2AngleToVector(float angle) {
     return {cosf(angle), sinf(angle)};
 }
@@ -100,10 +120,9 @@ int main(void) {
     // TODO make spawner spawn
     for (size_t i = 0; i < NUM_ANTS; i++) {
         Ant ant = {};
-        ant.position.x = randf() * WIDTH;
-        ant.position.y = randf() * HEIGHT;
-
-        ant.velocity = Vector2Unit() * ANT_MAX_SPEED;
+        ant.position = {randf() * WIDTH, randf() * HEIGHT};
+        ant.velocity = Vector2Unit() * ANT_SPEED;
+        ant.noise = new_noise_generator();
 
         da_append(&ant_spawner, ant);
     }
@@ -125,29 +144,34 @@ int main(void) {
         for (size_t i = 0; i < ant_spawner.count; i++) {
             Ant *ant = &ant_spawner.items[i];
 
-            // this is the reason we are in c++
+            float random_noise = get_noise(&ant->noise, dt);
 
             float t = dt;
             // acceleration
-            Vector2 a = Vector2Unit() * ANT_MAX_SPEED; // accelerate in a random direction
+            Vector2 a = Vector2Zero();
+            Vector2 s0 = ant->position;
             Vector2 u = ant->velocity;
 
-            #define DRAG 0.99
+            // repel ants from the edge
+            if (s0.x < 0)      { a.x += ANT_SPEED; }
+            if (s0.x > WIDTH)  { a.x -= ANT_SPEED; }
+            if (s0.y < 0)      { a.y += ANT_SPEED; }
+            if (s0.y > HEIGHT) { a.y -= ANT_SPEED; }
+
+            // give the ants some movement in the direction their already going, 
+            float heading = atan2(u.y, u.x);
+            heading += random_noise * PI * (ANT_HEADING_VARIANCE/100);
+            a += Vector2AngleToVector(heading) * ANT_SPEED;
+
+            // add some drag force!
+            a -= (u * ANT_DRAG);
 
             // v = u + at
-            Vector2 v = (u*DRAG) + (a*t);
+            Vector2 v = u + (a*t);
             // s = ut + (1/2)at^2
             Vector2 s = (u*t) + (a * (0.5*t*t));
 
-            Vector2 new_pos = ant->position + s;
-            // new_pos = Vector2Clamp(new_pos, Vector2Zeros, {WIDTH, HEIGHT});
-
-            if (new_pos.x < 0)      { new_pos.x =      0; }
-            if (new_pos.y < 0)      { new_pos.y =      0; }
-            if (new_pos.x > WIDTH)  { new_pos.x =  WIDTH; }
-            if (new_pos.y > HEIGHT) { new_pos.y = HEIGHT; }
-
-            ant->position = new_pos;
+            ant->position += s;
             ant->velocity = v;
         }
 
