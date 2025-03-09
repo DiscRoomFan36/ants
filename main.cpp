@@ -185,6 +185,7 @@ int main(void) {
             ant->velocity = v;
         }
 
+
         BeginDrawing();
         ClearBackground(GRAY);
 
@@ -207,6 +208,10 @@ int main(void) {
         // draw spawner
         DrawCircleV(ant_spawner.position, SPAWNER_RADIUS,     YELLOW);
         DrawCircleV(ant_spawner.position, SPAWNER_RADIUS*0.9, ORANGE);
+
+
+        // draw bounding box
+        DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
 
 
         // draw debug text
