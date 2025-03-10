@@ -222,8 +222,7 @@ int main(void) {
             if (ant_spawner.count >= SPAWNER_MAX_ANTS) continue;
 
             // spawn this ant around the spawner
-            float spawn_angle = randf() * 2 * PI;
-            Vector2 spawn_vector = Vector2AngleToVector(spawn_angle);
+            Vector2 spawn_vector = Vector2AngleToVector(randf() * 2 * PI);
             Ant ant = {
                 .position = ant_spawner.position + (spawn_vector * (SPAWNER_RADIUS*1.001)), // a tiny bit extra so they dont get removed,
                 .velocity = spawn_vector * ANT_SPEED,
