@@ -31,7 +31,8 @@
 #define FONT_SIZE 25
 
 
-#define NUM_ANTS 10
+// number of ants the spawner spawns
+#define SPAWNER_MAX_ANTS 400
 
 // in pixels
 #define SPAWNER_RADIUS 40
@@ -43,6 +44,10 @@
 // Image from Freeimages.com
 #define ANT_ART "Ant_clip_art_small.png"
 
+
+// How many ants the spawner spawns per second
+#define SPAWNER_ANTS_PER_SECOND 5
+#define TIME_TO_SPAWN (1.0f / SPAWNER_ANTS_PER_SECOND)
 
 // TODO change pixels per second to meters per second
 // in pixels per second
@@ -74,9 +79,10 @@ typedef struct Ant_Spawner {
     Ant *items;
     u64 count;
     u64 capacity;
-    
+
     // where the spawner is located at
     Vector2 position;
+    float last_spawn_time;
 } Ant_Spawner;
 
 
@@ -116,8 +122,7 @@ void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotatio
 int main(void) {
     // setup environment
     Ant_Spawner ant_spawner = {};
-    ant_spawner.position.x = WIDTH  / 2;
-    ant_spawner.position.y = HEIGHT / 2;
+    ant_spawner.position = {WIDTH  / 2, HEIGHT / 2};
 
     Rectangle bounding_box = {
         BOUNDING_BOX_PADDING,
@@ -125,17 +130,6 @@ int main(void) {
         WIDTH - BOUNDING_BOX_PADDING*2,
         HEIGHT - BOUNDING_BOX_PADDING*2
     };
-
-
-    // TODO make spawner spawn
-    for (size_t i = 0; i < NUM_ANTS; i++) {
-        Ant ant = {};
-        ant.position = {randf() * WIDTH, randf() * HEIGHT};
-        ant.velocity = Vector2Unit() * ANT_SPEED;
-        ant.noise = new_noise_generator();
-
-        da_append(&ant_spawner, ant);
-    }
 
 
     // setup window
@@ -149,10 +143,38 @@ int main(void) {
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
+        // if the dt gets to big, dont freak out, just use the normal step
+        if (dt > 0.25) dt = 1.0f/60.0f;
 
-        // update simulation!
+        // spawn an ant maybe
+        ant_spawner.last_spawn_time += dt;
+        while (ant_spawner.last_spawn_time > TIME_TO_SPAWN) {
+            ant_spawner.last_spawn_time -= TIME_TO_SPAWN;
+
+            if (ant_spawner.count >= SPAWNER_MAX_ANTS) continue;
+
+            // spawn this ant around the spawner
+            Ant ant = {};
+            float spawn_angle = randf() * 2 * PI;
+            Vector2 spawn_vector = Vector2AngleToVector(spawn_angle);
+            ant.position = ant_spawner.position + (spawn_vector * (SPAWNER_RADIUS*1.001)); // a tiny bit extra so they dont get removed
+            ant.velocity = spawn_vector * ANT_SPEED;
+            ant.noise = new_noise_generator();
+
+            da_append(&ant_spawner, ant);
+        }
+
+        // update ants!
         for (size_t i = 0; i < ant_spawner.count; i++) {
             Ant *ant = &ant_spawner.items[i];
+
+            // check if the ant is within the spawner, to remove it.
+            if (Vector2DistanceSqr(ant->position, ant_spawner.position) < SPAWNER_RADIUS*SPAWNER_RADIUS) {
+                // remove the ant with STAMP and remove, dec i
+                da_stamp_and_remove(&ant_spawner, i);
+                i -= 1;
+                continue;
+            }
 
             float random_noise = get_noise(&ant->noise, dt);
 
@@ -189,6 +211,8 @@ int main(void) {
         BeginDrawing();
         ClearBackground(GRAY);
 
+        // draw bounding box
+        DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
 
         // Draw ants
         for (size_t i = 0; i < ant_spawner.count; i++) {
@@ -210,11 +234,11 @@ int main(void) {
         DrawCircleV(ant_spawner.position, SPAWNER_RADIUS*0.9, ORANGE);
 
 
-        // draw bounding box
-        DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
-
-
         // draw debug text
+        char text_buf[64];
+        sprintf(text_buf, "Num Ants %zu", ant_spawner.count);
+        int text_width = MeasureText(text_buf, FONT_SIZE);
+        DrawText(text_buf, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
         // for (size_t i = 0; i < ant_spawner.count; i++) {
         //     Ant *ant = &ant_spawner.items[i];
 
