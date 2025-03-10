@@ -28,9 +28,9 @@
 // in pixels
 #define FONT_SIZE 25
 
+// Image from Freeimages.com
+#define ANT_ART_PATH "Ant_clip_art_small.png"
 
-// number of ants the spawner spawns
-#define SPAWNER_MAX_ANTS 400
 
 // in units
 #define SPAWNER_RADIUS 2.5
@@ -39,9 +39,9 @@
 // relative to size of ant image, just a random number
 #define ANT_SCALE (ANT_RADIUS/25.0f)
 
-// Image from Freeimages.com
-#define ANT_ART "Ant_clip_art_small.png"
 
+// number of ants the spawner spawns
+#define SPAWNER_MAX_ANTS 400
 
 // How many ants the spawner spawns per second
 #define SPAWNER_ANTS_PER_SECOND 5
@@ -124,6 +124,11 @@ void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotatio
 }
 
 
+void key_toggle_setting(bool *setting, int key) {
+    if (IsKeyPressed(key)) *setting = !(*setting);
+}
+
+
 int main(void) {
     // setup environment
 
@@ -156,17 +161,29 @@ int main(void) {
 
 
     // setup draw stuff
-    Texture ant_texture = LoadTexture(ANT_ART);
+    Texture ant_texture = LoadTexture(ANT_ART_PATH);
 
+    // key toggles
     bool paused = false;
+    bool move_spawner_with_mouse = false;
+    bool debug_draw_ants = false;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
         // if the dt gets too big, dont freak out, just use the normal step
         if (dt > 0.25) dt = 1.0f/60.0f;
 
-        if (IsKeyPressed(KEY_SPACE)) paused = !paused;
-        if (paused) dt = 0;
+
+        { // key toggles
+            key_toggle_setting(&paused, KEY_SPACE);
+            if (paused) dt = 0;
+
+            key_toggle_setting(&move_spawner_with_mouse, KEY_M);
+            if (move_spawner_with_mouse) ant_spawner.position = GetScreenToWorld2D(GetMousePosition(), camera) * PIXELS_TO_UNITS;
+
+            key_toggle_setting(&debug_draw_ants, KEY_N);
+        }
+
 
         { // Taken from https://www.raylib.com/examples/core/loader.html?name=core_2d_camera_mouse_zoom
             // handle mouse dragging
@@ -228,10 +245,11 @@ int main(void) {
                 continue;
             }
 
+            // THINK is this the place to put this? its only used in one place?
+            // but... im trying to remove ant stuff from the inner parts...
             float random_noise = get_noise(&ant->noise, dt);
 
             float t = dt;
-            // acceleration
             Vector2 a = Vector2Zero();
             Vector2 s0 = ant->position;
             Vector2 u = ant->velocity;
@@ -283,9 +301,11 @@ int main(void) {
                 for (size_t i = 0; i < ant_spawner.count; i++) {
                     Ant *ant = &ant_spawner.items[i];
 
-                    DrawCircleV(ant->position * UNITS_TO_PIXELS, ANT_RADIUS * UNITS_TO_PIXELS, RED);
-                    // shows where it would be 1 sec in future, with no acc
-                    DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + ant->velocity) * UNITS_TO_PIXELS, BLUE);
+                    if (debug_draw_ants) {
+                        DrawCircleV(ant->position * UNITS_TO_PIXELS, ANT_RADIUS * UNITS_TO_PIXELS, RED);
+                        // shows where it would be 1 sec in future, with no acc
+                        DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + ant->velocity) * UNITS_TO_PIXELS, BLUE);
+                    }
 
                     float rotation = atan2(ant->velocity.y, ant->velocity.x);
                     rotation += PI/2; // extra 90 for rotating image
@@ -302,20 +322,9 @@ int main(void) {
 
 
             // draw debug text
-            char text_buf[64];
-            sprintf(text_buf, "Num Ants %zu", ant_spawner.count);
-            int text_width = MeasureText(text_buf, FONT_SIZE);
-            DrawText(text_buf, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
-            // for (size_t i = 0; i < ant_spawner.count; i++) {
-            //     Ant *ant = &ant_spawner.items[i];
-
-            //     #define FONT_SIZE 25
-            //     char text_buf[64];
-            //     sprintf(text_buf, "Ant %zu: "VEC2_Fmt"", i, VEC2_Arg(ant->velocity));
-            //     int text_width = MeasureText(text_buf, FONT_SIZE);
-            //     DrawText(text_buf, WIDTH - text_width - 10, 10 + i*FONT_SIZE, FONT_SIZE, BLACK);
-            // }
-
+            const char *text = TextFormat("Num Ants %zu", ant_spawner.count);
+            int text_width = MeasureText(text, FONT_SIZE);
+            DrawText(text, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
 
             DrawFPS(10, 10);
         EndDrawing();
