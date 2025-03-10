@@ -143,7 +143,7 @@ int main(void) {
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
-        // if the dt gets to big, dont freak out, just use the normal step
+        // if the dt gets too big, dont freak out, just use the normal step
         if (dt > 0.25) dt = 1.0f/60.0f;
 
         // spawn an ant maybe
