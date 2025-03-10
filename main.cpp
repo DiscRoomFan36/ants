@@ -3,6 +3,7 @@
 
 // these are system librarys for me
 #include <raylib.h>
+#include <rlgl.h>
 #include <raymath.h>
 
 #include "ints.h"
@@ -136,15 +137,55 @@ int main(void) {
     InitWindow(WIDTH, HEIGHT, "Ants");
     SetTargetFPS(60);
 
+    Camera2D camera = {
+        .offset = {0, 0},
+        .rotation = 0,
+        .target = {0, 0},
+        .zoom = 1,
+    };
+
 
     // setup draw stuff
     Texture ant_texture = LoadTexture(ANT_ART);
 
+    bool paused = false;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
         // if the dt gets too big, dont freak out, just use the normal step
         if (dt > 0.25) dt = 1.0f/60.0f;
+
+        if (IsKeyPressed(KEY_SPACE)) paused = !paused;
+        if (paused) dt = 0;
+
+        { // Taken from https://www.raylib.com/examples/core/loader.html?name=core_2d_camera_mouse_zoom
+            // handle mouse dragging
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                Vector2 delta = GetMouseDelta();
+                delta *= -1.0f/camera.zoom;
+                camera.target += delta;
+            }
+
+            // Zoom based on mouse wheel
+            float wheel = GetMouseWheelMove();
+            if (wheel != 0) {
+                // Get the world point that is under the mouse
+                Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+
+                // Set the offset to where the mouse is
+                camera.offset = GetMousePosition();
+
+                // Set the target to match, so that the camera maps the world space point 
+                // under the cursor to the screen space point under the cursor at any zoom
+                camera.target = mouseWorldPos;
+
+                // Zoom increment
+                float scaleFactor = 1.0f + (0.25f*fabsf(wheel));
+                if (wheel < 0) scaleFactor = 1.0f/scaleFactor;
+                camera.zoom = Clamp(camera.zoom*scaleFactor, 0.125f, 64.0f);
+            }
+        }
+
 
         // spawn an ant maybe
         ant_spawner.last_spawn_time += dt;
@@ -154,12 +195,13 @@ int main(void) {
             if (ant_spawner.count >= SPAWNER_MAX_ANTS) continue;
 
             // spawn this ant around the spawner
-            Ant ant = {};
             float spawn_angle = randf() * 2 * PI;
             Vector2 spawn_vector = Vector2AngleToVector(spawn_angle);
-            ant.position = ant_spawner.position + (spawn_vector * (SPAWNER_RADIUS*1.001)); // a tiny bit extra so they dont get removed
-            ant.velocity = spawn_vector * ANT_SPEED;
-            ant.noise = new_noise_generator();
+            Ant ant = {
+                .position = ant_spawner.position + (spawn_vector * (SPAWNER_RADIUS*1.001)), // a tiny bit extra so they dont get removed,
+                .velocity = spawn_vector * ANT_SPEED,
+                .noise = new_noise_generator(),
+            };
 
             da_append(&ant_spawner, ant);
         }
@@ -209,48 +251,71 @@ int main(void) {
 
 
         BeginDrawing();
-        ClearBackground(GRAY);
+            ClearBackground(GRAY);
 
-        // draw bounding box
-        DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
+            BeginMode2D(camera);
 
-        // Draw ants
-        for (size_t i = 0; i < ant_spawner.count; i++) {
-            Ant *ant = &ant_spawner.items[i];
+                // draw bounding box
+                DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
+                // TODO draw line grid... where the pheromones are going to be,
+                // but only in the camera view / bounding box?
 
-            DrawCircleV(ant->position, ANT_RADIUS, RED);
-            // shows where it would be 1 sec in future, with no acc
-            DrawLineV(ant->position, ant->position + ant->velocity, BLUE);
+                // this kinda works, dont know how though
+                // rlPushMatrix();
+                //     rlTranslatef(0, 25*50, 0);
+                //     rlRotatef(90, 1, 0, 0);
+                //     DrawGrid(100, 50);
+                // rlPopMatrix();
 
-            float rotation = atan2(ant->velocity.y, ant->velocity.x);
-            rotation += PI/2; // extra 90 for rotating image
+                Color line_color = ColorAlpha(WHITE, 0.25);
+                for (float i = bounding_box.x; i < bounding_box.x + bounding_box.width; i += 40) {
+                    if (i == bounding_box.x) continue;
+                    DrawLine(i, bounding_box.y, i, bounding_box.y + bounding_box.height, line_color);
+                }
+                for (float i = bounding_box.y; i < bounding_box.y + bounding_box.height; i += 40) {
+                    if (i == bounding_box.y) continue;
+                    DrawLine(bounding_box.x, i, bounding_box.x + bounding_box.width, i, line_color);
+                }
 
-            DrawTextureAt(ant_texture, ant->position, ANT_SCALE, rotation, RED);
-        }
+                // Draw ants
+                for (size_t i = 0; i < ant_spawner.count; i++) {
+                    Ant *ant = &ant_spawner.items[i];
 
+                    DrawCircleV(ant->position, ANT_RADIUS, RED);
+                    // shows where it would be 1 sec in future, with no acc
+                    DrawLineV(ant->position, ant->position + ant->velocity, BLUE);
 
-        // draw spawner
-        DrawCircleV(ant_spawner.position, SPAWNER_RADIUS,     YELLOW);
-        DrawCircleV(ant_spawner.position, SPAWNER_RADIUS*0.9, ORANGE);
+                    float rotation = atan2(ant->velocity.y, ant->velocity.x);
+                    rotation += PI/2; // extra 90 for rotating image
 
-
-        // draw debug text
-        char text_buf[64];
-        sprintf(text_buf, "Num Ants %zu", ant_spawner.count);
-        int text_width = MeasureText(text_buf, FONT_SIZE);
-        DrawText(text_buf, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
-        // for (size_t i = 0; i < ant_spawner.count; i++) {
-        //     Ant *ant = &ant_spawner.items[i];
-
-        //     #define FONT_SIZE 25
-        //     char text_buf[64];
-        //     sprintf(text_buf, "Ant %zu: "VEC2_Fmt"", i, VEC2_Arg(ant->velocity));
-        //     int text_width = MeasureText(text_buf, FONT_SIZE);
-        //     DrawText(text_buf, WIDTH - text_width - 10, 10 + i*FONT_SIZE, FONT_SIZE, BLACK);
-        // }
+                    DrawTextureAt(ant_texture, ant->position, ANT_SCALE, rotation, RED);
+                }
 
 
-        DrawFPS(10, 10);
+                // draw spawner
+                DrawCircleV(ant_spawner.position, SPAWNER_RADIUS,     YELLOW);
+                DrawCircleV(ant_spawner.position, SPAWNER_RADIUS*0.9, ORANGE);
+
+            EndMode2D();
+
+
+            // draw debug text
+            char text_buf[64];
+            sprintf(text_buf, "Num Ants %zu", ant_spawner.count);
+            int text_width = MeasureText(text_buf, FONT_SIZE);
+            DrawText(text_buf, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
+            // for (size_t i = 0; i < ant_spawner.count; i++) {
+            //     Ant *ant = &ant_spawner.items[i];
+
+            //     #define FONT_SIZE 25
+            //     char text_buf[64];
+            //     sprintf(text_buf, "Ant %zu: "VEC2_Fmt"", i, VEC2_Arg(ant->velocity));
+            //     int text_width = MeasureText(text_buf, FONT_SIZE);
+            //     DrawText(text_buf, WIDTH - text_width - 10, 10 + i*FONT_SIZE, FONT_SIZE, BLACK);
+            // }
+
+
+            DrawFPS(10, 10);
         EndDrawing();
     }
 
