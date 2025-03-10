@@ -14,33 +14,30 @@
 
 
 
-// TODO refactor for this
-// 10 meters for every pixel, to be changed when you zoom the camera or something
-#define METER_TO_PIXEL 0.1
-#define PIXEL_TO_METER 10
-
-// TODO
-// check out the camera Stuct
-// Camera2D camera = {};
+// 10 units for every pixel, and just let the camera do its own thing
+#define UNITS_TO_PIXELS 10
+#define PIXELS_TO_UNITS (1.0f/UNITS_TO_PIXELS)
 
 
 #define FACTOR 60
+// in pixels
 #define WIDTH  (16 * FACTOR)
+// in pixels
 #define HEIGHT ( 9 * FACTOR)
 
-// obviously in pixels
+// in pixels
 #define FONT_SIZE 25
 
 
 // number of ants the spawner spawns
 #define SPAWNER_MAX_ANTS 400
 
-// in pixels
-#define SPAWNER_RADIUS 40
-// in pixels
-#define ANT_RADIUS 10
-// in pixels, relative to size of ant image, TODO
-#define ANT_SCALE 0.35
+// in units
+#define SPAWNER_RADIUS 2.5
+// in units
+#define ANT_RADIUS 0.2
+// relative to size of ant image, just a random number
+#define ANT_SCALE (ANT_RADIUS/25.0f)
 
 // Image from Freeimages.com
 #define ANT_ART "Ant_clip_art_small.png"
@@ -50,9 +47,8 @@
 #define SPAWNER_ANTS_PER_SECOND 5
 #define TIME_TO_SPAWN (1.0f / SPAWNER_ANTS_PER_SECOND)
 
-// TODO change pixels per second to meters per second
-// in pixels per second
-#define ANT_SPEED 100
+// in units per second
+#define ANT_SPEED 3
 
 // how much the previous velocity is negated every second.
 // aka it add a backwards vector to the acceleration
@@ -61,17 +57,20 @@
 // vary the heading a little bit, in % of total circle
 #define ANT_HEADING_VARIANCE 50
 
+// TODO change the camera to fit this, not the box
 // in pixels, from the edge
 #define BOUNDING_BOX_PADDING 20
 
 
 typedef struct Ant {
+    // in units
     Vector2 position;
+    // in units per second
     Vector2 velocity;
 
     // TODO should this be here? all the ants want some noise,
     // but one per ant? and on every single struct? Hmm...
-    // maybe only make so Generator, and  randomly give them out with batching
+    // maybe only make so Generator, and randomly give them out with batching
     NoiseGenerator noise;
 } Ant;
 
@@ -81,8 +80,9 @@ typedef struct Ant_Spawner {
     u64 count;
     u64 capacity;
 
-    // where the spawner is located at
+    // in units, where the spawner is located at
     Vector2 position;
+    // in seconds
     float last_spawn_time;
 } Ant_Spawner;
 
@@ -101,8 +101,12 @@ Vector2 Vector2Unit(void) {
     return Vector2AngleToVector(randf() * 2 * PI);
 }
 
-// draw a texture centered at position, with scale, rotation and tint
-// rotation in RAD
+inline Rectangle operator * (const Rectangle& lhs, const float& rhs) {
+    Rectangle result = {lhs.x * rhs, lhs.y * rhs, lhs.width * rhs, lhs.height * rhs};
+    return result;
+}
+
+// draw a texture centered at position, with scale, rotation (in RAD) and tint
 void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotation, Color tint) {
     Rectangle sourceRec  = { 0, 0, (float)texture.width, (float)texture.height };
     Rectangle dest_Rec = {
@@ -122,14 +126,20 @@ void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotatio
 
 int main(void) {
     // setup environment
-    Ant_Spawner ant_spawner = {};
-    ant_spawner.position = {WIDTH  / 2, HEIGHT / 2};
 
+    // make sure this is in whole units
     Rectangle bounding_box = {
-        BOUNDING_BOX_PADDING,
-        BOUNDING_BOX_PADDING,
-        WIDTH - BOUNDING_BOX_PADDING*2,
-        HEIGHT - BOUNDING_BOX_PADDING*2
+        0, 0,
+        (int) (WIDTH  * PIXELS_TO_UNITS),
+        (int) (HEIGHT * PIXELS_TO_UNITS),
+    };
+
+    Ant_Spawner ant_spawner = {};
+    ant_spawner.position = {
+        bounding_box.width  / 2,
+        bounding_box.height / 2,
+        // (WIDTH/2) * PIXELS_TO_UNITS,
+        // (HEIGHT/2) * PIXELS_TO_UNITS,
     };
 
 
@@ -139,8 +149,8 @@ int main(void) {
 
     Camera2D camera = {
         .offset = {0, 0},
-        .rotation = 0,
         .target = {0, 0},
+        .rotation = 0,
         .zoom = 1,
     };
 
@@ -255,46 +265,38 @@ int main(void) {
 
             BeginMode2D(camera);
 
-                // draw bounding box
-                DrawRectangleRoundedLines(bounding_box, 0.1, 1, GOLD);
-                // TODO draw line grid... where the pheromones are going to be,
-                // but only in the camera view / bounding box?
+                Rectangle pixel_bb = bounding_box * UNITS_TO_PIXELS;
 
-                // this kinda works, dont know how though
-                // rlPushMatrix();
-                //     rlTranslatef(0, 25*50, 0);
-                //     rlRotatef(90, 1, 0, 0);
-                //     DrawGrid(100, 50);
-                // rlPopMatrix();
-
+                // draw bounding box and grid
+                DrawRectangleRoundedLines(pixel_bb, 0.1, 1, GOLD);
                 Color line_color = ColorAlpha(WHITE, 0.25);
-                for (float i = bounding_box.x; i < bounding_box.x + bounding_box.width; i += 40) {
-                    if (i == bounding_box.x) continue;
-                    DrawLine(i, bounding_box.y, i, bounding_box.y + bounding_box.height, line_color);
+                for (int i = pixel_bb.x + UNITS_TO_PIXELS; i < pixel_bb.x + pixel_bb.width; i += UNITS_TO_PIXELS) {
+                    if (i == pixel_bb.x) continue;
+                    DrawLine(i, pixel_bb.y, i, pixel_bb.y + pixel_bb.height, line_color);
                 }
-                for (float i = bounding_box.y; i < bounding_box.y + bounding_box.height; i += 40) {
-                    if (i == bounding_box.y) continue;
-                    DrawLine(bounding_box.x, i, bounding_box.x + bounding_box.width, i, line_color);
+                for (int i = pixel_bb.y + UNITS_TO_PIXELS; i < pixel_bb.y + pixel_bb.height; i += UNITS_TO_PIXELS) {
+                    if (i == pixel_bb.y) continue;
+                    DrawLine(pixel_bb.x, i, pixel_bb.x + pixel_bb.width, i, line_color);
                 }
 
                 // Draw ants
                 for (size_t i = 0; i < ant_spawner.count; i++) {
                     Ant *ant = &ant_spawner.items[i];
 
-                    DrawCircleV(ant->position, ANT_RADIUS, RED);
+                    DrawCircleV(ant->position * UNITS_TO_PIXELS, ANT_RADIUS * UNITS_TO_PIXELS, RED);
                     // shows where it would be 1 sec in future, with no acc
-                    DrawLineV(ant->position, ant->position + ant->velocity, BLUE);
+                    DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + ant->velocity) * UNITS_TO_PIXELS, BLUE);
 
                     float rotation = atan2(ant->velocity.y, ant->velocity.x);
                     rotation += PI/2; // extra 90 for rotating image
 
-                    DrawTextureAt(ant_texture, ant->position, ANT_SCALE, rotation, RED);
+                    DrawTextureAt(ant_texture, ant->position * UNITS_TO_PIXELS, ANT_SCALE * UNITS_TO_PIXELS, rotation, RED);
                 }
 
 
                 // draw spawner
-                DrawCircleV(ant_spawner.position, SPAWNER_RADIUS,     YELLOW);
-                DrawCircleV(ant_spawner.position, SPAWNER_RADIUS*0.9, ORANGE);
+                DrawCircleV(ant_spawner.position * UNITS_TO_PIXELS, SPAWNER_RADIUS       * UNITS_TO_PIXELS, YELLOW);
+                DrawCircleV(ant_spawner.position * UNITS_TO_PIXELS, SPAWNER_RADIUS * 0.9 * UNITS_TO_PIXELS, ORANGE);
 
             EndMode2D();
 
