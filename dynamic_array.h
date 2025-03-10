@@ -2,7 +2,7 @@
 // dynamic_array.h - simple dynamic array
 // Credit to tsoding for showing me the way: @Tsoding - https://www.youtube.com/c/Tsoding
 //
-// Fletcher M - 07/02/2025
+// Fletcher M - 10/03/2025
 //
 
 #ifndef DYNAMIC_ARRAY_H_
@@ -24,6 +24,12 @@
         (da)->items[(da)->count++] = (item);                                                               \
     } while (0)
 
+#define da_stamp_and_remove(da, index)                      \
+    do {                                                    \
+        (da)->items[(index)] = (da)->items[(da)->count-1];  \
+        (da)->count -= 1;                                   \
+    } while (0)
+    
 
 #define da_free(da)         \
     do {                    \
