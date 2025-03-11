@@ -1,4 +1,9 @@
+
 // raylib and some helpers I made
+
+#ifndef RAYLIB_EXTENSIONS_H_
+#define RAYLIB_EXTENSIONS_H_
+
 
 // these are system librarys for me
 #include <raylib.h>
@@ -43,3 +48,6 @@ void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotatio
 
     DrawTexturePro(texture, sourceRec, dest_Rec, origin, rotation, tint);
 }
+
+
+#endif // RAYLIB_EXTENSIONS_H_

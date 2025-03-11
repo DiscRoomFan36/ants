@@ -6,9 +6,9 @@
 #include "dynamic_array.h"
 
 #include "common.h"
+#include "raylib_extentions.h"
 
 #include "noise.cpp"
-#include "raylib_extentions.cpp"
 
 
 
