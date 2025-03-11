@@ -1,10 +1,5 @@
 
-#include <stdlib.h>
-
-// Return a random float between 0 and 1
-float randf(void) {
-    return (float) rand() / (float) RAND_MAX;
-}
+#include "common.h"
 
 float clamp(float x, float lowerlimit = 0.0f, float upperlimit = 1.0f) {
     if (x < lowerlimit) return lowerlimit;
