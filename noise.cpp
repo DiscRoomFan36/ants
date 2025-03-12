@@ -1,4 +1,8 @@
 
+#ifndef NOISE_CPP_
+#define NOISE_CPP_
+
+
 #include "common.h"
 
 float clamp(float x, float lowerlimit = 0.0f, float upperlimit = 1.0f) {
@@ -47,3 +51,4 @@ float get_noise(NoiseGenerator *noise, float dt) {
 }
 
 
+#endif // NOISE_CPP_

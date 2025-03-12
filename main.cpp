@@ -10,6 +10,7 @@
 
 #include "noise.cpp"
 #include "cells.cpp"
+#include "ant.cpp"
 
 
 
@@ -67,29 +68,6 @@
 #define PHEROMONE_PER_SECOND 1
 
 
-typedef struct Ant {
-    // in units
-    Vector2 position;
-    // in units per second
-    Vector2 velocity;
-
-    // TODO should this be here? all the ants want some noise,
-    // but one per ant? and on every single struct? Hmm...
-    // maybe only make so Generator, and randomly give them out with batching
-    NoiseGenerator noise;
-} Ant;
-
-// thing that spawns ants, up to NUM_ANTS or something
-typedef struct Ant_Spawner {
-    Ant *items;
-    u64 count;
-    u64 capacity;
-
-    // in units, where the spawner is located at
-    Vector2 position;
-    // in seconds
-    float last_spawn_time;
-} Ant_Spawner;
 
 
 void key_toggle_setting(bool *setting, int key) {
@@ -249,8 +227,8 @@ int main(void) {
                 if (s0.y                  < bounding_box.y)      { a.y += ANT_SPEED; }
                 if (s0.y + bounding_box.y > bounding_box.height) { a.y -= ANT_SPEED; }
 
-                // give the ants some movement in the direction their already going, 
-                float heading = atan2(u.y, u.x);
+                // give the ants some movement in the direction their already going,
+                float heading = Vector2VectorToAngle(u);
                 heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
                 a += Vector2AngleToVector(heading) * ANT_SPEED;
 
@@ -275,6 +253,9 @@ int main(void) {
             Cell *cell = get_cell_at(&pheromone_map, ant->position);
             cell->pheromone_level += PHEROMONE_PER_SECOND * dt;
             // TODO do we cap this? or just let the decay do its thing
+
+            // now the hard part... we need to get all the pheromones in a vision cone
+
         }
 
 
@@ -327,12 +308,37 @@ int main(void) {
                         DrawCircleV(ant->position * UNITS_TO_PIXELS, ANT_RADIUS * UNITS_TO_PIXELS, RED);
                         // shows where it would be 1 sec in future, with no acc
                         DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + ant->velocity) * UNITS_TO_PIXELS, BLUE);
+
+                        Vector2 *cone = AntVisionCone(*ant);
+                        { // sort the points counter clockwise
+                            // 1. find the lowest y (bc way the screen renders)
+                            int low_y = 0;
+                            for (size_t i = 1; i < 3; i++) {
+                                if (cone[i].y < cone[low_y].y) low_y = i;
+                            }
+                            // 2. move lowest to front
+                            if (low_y) {
+                                Vector2 tmp = cone[0];
+                                cone[0] = cone[low_y];
+                                cone[low_y] = tmp;
+                            }
+                            // 3. now swap the one with the lowest x
+                            if (cone[2].x < cone[1].x) {
+                                Vector2 tmp = cone[1];
+                                cone[1] = cone[2];
+                                cone[2] = tmp;
+                            }
+                        }
+
+                        for (size_t j = 0; j < 3; j++) cone[j] *= UNITS_TO_PIXELS;
+                        DrawTriangle(cone[0], cone[1], cone[2], RED);
                     }
 
-                    float rotation = atan2(ant->velocity.y, ant->velocity.x);
+                    float rotation = Vector2VectorToAngle(ant->velocity);
                     rotation += PI/2; // extra 90 for rotating image
 
                     DrawTextureAt(ant_texture, ant->position * UNITS_TO_PIXELS, ANT_SCALE * UNITS_TO_PIXELS, rotation, RED);
+
                 }
 
 
@@ -341,6 +347,14 @@ int main(void) {
                 DrawCircleV(ant_spawner.position * UNITS_TO_PIXELS, SPAWNER_RADIUS * 0.9 * UNITS_TO_PIXELS, ORANGE);
 
             EndMode2D();
+
+            // {
+            //     Vector2 p1 = {WIDTH/2, 0};
+            //     Vector2 p2 = {0, HEIGHT};
+            //     Vector2 p3 = {WIDTH, HEIGHT};
+
+            //     DrawTriangle(p3, p1, p2, RED);
+            // }
 
 
             // draw debug text

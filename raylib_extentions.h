@@ -22,6 +22,10 @@ Vector2 Vector2AngleToVector(float angle) {
     return {cosf(angle), sinf(angle)};
 }
 
+float Vector2VectorToAngle(Vector2 v) {
+    return atan2(v.y, v.x);
+}
+
 // returns a random unit vector
 Vector2 Vector2Unit(void) {
     return Vector2AngleToVector(randf() * 2 * PI);

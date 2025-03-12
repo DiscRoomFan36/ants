@@ -1,10 +1,15 @@
 
+#ifndef CELLS_CPP_
+#define CELLS_CPP_
+
+
+#include <stdlib.h>
+
 #include "ints.h"
 #include "dynamic_array.h"
 
 #include "raylib_extentions.h"
 
-#include <stdlib.h>
 
 typedef struct Cell {
     float pheromone_level;
@@ -110,4 +115,4 @@ Cell *get_cell_at(Map *map, Vector2 position) {
 }
 
 
-
+#endif // CELLS_CPP_
