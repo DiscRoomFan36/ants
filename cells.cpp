@@ -16,6 +16,7 @@ typedef struct Cell {
 static_assert(CHUNK_X <= UINT8_MAX + 1);
 static_assert(CHUNK_Y <= UINT8_MAX + 1);
 
+// TODO Kinda want to make this a template...
 typedef struct Chunk {
     Cell cells[CHUNK_X * CHUNK_Y];
 } Chunk;
