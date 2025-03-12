@@ -9,6 +9,7 @@
 #include "raylib_extentions.h"
 
 #include "noise.cpp"
+#include "cells.cpp"
 
 
 
@@ -59,6 +60,12 @@
 // in pixels, from the edge
 #define BOUNDING_BOX_PADDING 20
 
+// how many seconds until pheromone is half the amount it was
+#define PHEROMONE_HALF_LIFE_TIME 3
+#define PHEROMONE_DECAY_EIGENVALUE (1.0f/PHEROMONE_HALF_LIFE_TIME)
+// how much pheromone is placed per second
+#define PHEROMONE_PER_SECOND 1
+
 
 typedef struct Ant {
     // in units
@@ -93,6 +100,8 @@ void key_toggle_setting(bool *setting, int key) {
 int main(void) {
     // setup environment
 
+    Map pheromone_map = {};
+
     // make sure this is in whole units
     Rectangle bounding_box = {
         0, 0,
@@ -104,8 +113,6 @@ int main(void) {
     ant_spawner.position = {
         bounding_box.width  / 2,
         bounding_box.height / 2,
-        // (WIDTH/2) * PIXELS_TO_UNITS,
-        // (HEIGHT/2) * PIXELS_TO_UNITS,
     };
 
 
@@ -128,6 +135,7 @@ int main(void) {
     bool paused = false;
     bool move_spawner_with_mouse = false;
     bool debug_draw_ants = false;
+    bool debug_draw_ant_positions = false;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -143,6 +151,7 @@ int main(void) {
             if (move_spawner_with_mouse) ant_spawner.position = GetScreenToWorld2D(GetMousePosition(), camera) * PIXELS_TO_UNITS;
 
             key_toggle_setting(&debug_draw_ants, KEY_N);
+            key_toggle_setting(&debug_draw_ant_positions, KEY_B);
         }
 
 
@@ -171,6 +180,22 @@ int main(void) {
                 float scaleFactor = 1.0f + (0.25f*fabsf(wheel));
                 if (wheel < 0) scaleFactor = 1.0f/scaleFactor;
                 camera.zoom = Clamp(camera.zoom*scaleFactor, 0.125f, 64.0f);
+            }
+        }
+
+
+        // handle pheromone
+        for (u64 i = 0; i < pheromone_map.chunks.count; i++) {
+            Chunk *chunk = &pheromone_map.chunks.items[i];
+            for (u64 j = 0; j < CHUNK_X*CHUNK_Y; j++) {
+                Cell *cell = &chunk->cells[j];
+
+                if (!cell->pheromone_level) continue;
+
+                // https://en.wikipedia.org/wiki/Exponential_decay#Solution_of_the_differential_equation
+                // N(t) = N(0) * c^(-decay * t)
+                cell->pheromone_level *= expf(-PHEROMONE_DECAY_EIGENVALUE * dt);
+                if (cell->pheromone_level < 0.00001) cell->pheromone_level = 0;
             }
         }
 
@@ -205,36 +230,51 @@ int main(void) {
                 continue;
             }
 
-            // THINK is this the place to put this? its only used in one place?
-            // but... im trying to remove ant stuff from the inner parts...
-            float random_noise = get_noise(&ant->noise, dt);
+            // -------------------------------------
+            //               Move Ant
+            // -------------------------------------
+            {
+                // THINK is this the place to put this? its only used in one place?
+                // but... im trying to remove ant stuff from the inner parts...
+                float random_noise = get_noise(&ant->noise, dt);
 
-            float t = dt;
-            Vector2 a = Vector2Zero();
-            Vector2 s0 = ant->position;
-            Vector2 u = ant->velocity;
+                float t = dt;
+                Vector2 a = Vector2Zero();
+                Vector2 s0 = ant->position;
+                Vector2 u = ant->velocity;
 
-            // repel ants from the edge
-            if (s0.x                  < bounding_box.x)      { a.x += ANT_SPEED; }
-            if (s0.x + bounding_box.x > bounding_box.width)  { a.x -= ANT_SPEED; }
-            if (s0.y                  < bounding_box.y)      { a.y += ANT_SPEED; }
-            if (s0.y + bounding_box.y > bounding_box.height) { a.y -= ANT_SPEED; }
+                // repel ants from the edge
+                if (s0.x                  < bounding_box.x)      { a.x += ANT_SPEED; }
+                if (s0.x + bounding_box.x > bounding_box.width)  { a.x -= ANT_SPEED; }
+                if (s0.y                  < bounding_box.y)      { a.y += ANT_SPEED; }
+                if (s0.y + bounding_box.y > bounding_box.height) { a.y -= ANT_SPEED; }
 
-            // give the ants some movement in the direction their already going, 
-            float heading = atan2(u.y, u.x);
-            heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
-            a += Vector2AngleToVector(heading) * ANT_SPEED;
+                // give the ants some movement in the direction their already going, 
+                float heading = atan2(u.y, u.x);
+                heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
+                a += Vector2AngleToVector(heading) * ANT_SPEED;
 
-            // add some drag force!
-            a -= (u * ANT_DRAG);
+                // add some drag force!
+                a -= (u * ANT_DRAG);
 
-            // v = u + at
-            Vector2 v = u + (a*t);
-            // s = ut + (1/2)at^2
-            Vector2 s = (u*t) + (a * (0.5*t*t));
+                // v = u + at
+                Vector2 v = u + (a*t);
+                // s = ut + (1/2)at^2
+                Vector2 s = (u*t) + (a * (0.5*t*t));
 
-            ant->position += s;
-            ant->velocity = v;
+                ant->position += s;
+                ant->velocity = v;
+            }
+
+
+            // -------------------------------------
+            //           Pheromone stuff
+            // -------------------------------------
+
+            // the cell the ant is over.
+            Cell *cell = get_cell_at(&pheromone_map, ant->position);
+            cell->pheromone_level += PHEROMONE_PER_SECOND * dt;
+            // TODO do we cap this? or just let the decay do its thing
         }
 
 
@@ -256,6 +296,28 @@ int main(void) {
                     if (i == pixel_bb.y) continue;
                     DrawLine(pixel_bb.x, i, pixel_bb.x + pixel_bb.width, i, line_color);
                 }
+
+                // Draw Pheromones
+                for (u64 i = 0; i < pheromone_map.chunks.count; i++) {
+                    Chunk chunk = pheromone_map.chunks.items[i];
+                    Vector2i position = pheromone_map.positions.items[i];
+
+                    for (u64 j = 0; j < CHUNK_X*CHUNK_Y; j++) {
+                        Cell cell = chunk.cells[j];
+
+                        if (!cell.pheromone_level) continue;
+
+                        u8 x = j % CHUNK_X;
+                        u8 y = j / CHUNK_X;
+
+                        Vector2i cell_position = {position.x*CHUNK_X + x, position.y*CHUNK_Y + y};
+                        Vector2 cell_center = {cell_position.x + 0.5f, cell_position.y + 0.5f};
+
+                        Color color = ColorAlpha(RED, cell.pheromone_level);
+                        DrawCircleV(cell_center * UNITS_TO_PIXELS, 0.5 * UNITS_TO_PIXELS, color);
+                    }
+                }
+
 
                 // Draw ants
                 for (size_t i = 0; i < ant_spawner.count; i++) {
@@ -285,6 +347,17 @@ int main(void) {
             const char *text = TextFormat("Num Ants %zu", ant_spawner.count);
             int text_width = MeasureText(text, FONT_SIZE);
             DrawText(text, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
+
+            if (debug_draw_ant_positions) {
+                for (size_t i = 0; i < MIN(ant_spawner.count, 10); i++) {
+                    Ant *ant = &ant_spawner.items[i];
+
+                    const char *text = TextFormat("Ant: " VEC2_Fmt, VEC2_Arg(ant->position));
+                    int text_width = MeasureText(text, FONT_SIZE);
+                    DrawText(text, WIDTH - text_width - 10, 10 + (i+1)*FONT_SIZE, FONT_SIZE, GREEN);
+                }
+            }
+
 
             DrawFPS(10, 10);
         EndDrawing();

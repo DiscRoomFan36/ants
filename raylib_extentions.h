@@ -50,4 +50,13 @@ void DrawTextureAt(Texture texture, Vector2 position, float scale, float rotatio
 }
 
 
+typedef struct Vector2i {
+    s32 x, y;
+} Vector2i;
+
+// inline Vector2i operator * (const Vector2i& lhs, const s32& rhs) {
+//     return {lhs.x * rhs, lhs.y * rhs};
+// }
+
+
 #endif // RAYLIB_EXTENSIONS_H_
