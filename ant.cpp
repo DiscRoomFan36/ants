@@ -1,6 +1,7 @@
 
 #include "ints.h"
 
+#include "defines.h"
 #include "common.h"
 #include "raylib_extentions.h"
 
@@ -33,113 +34,59 @@ typedef struct Ant_Spawner {
 } Ant_Spawner;
 
 
-// returns a pointer to a static array, of the three points making up the ants vision cone
-Vector2 *AntVisionCone(Ant ant) {
-    static Vector2 points[3];
-
-    points[0] = ant.position;
-
-    // in units, how far the vision cone extends
-    #define ANT_VISION_DISTANCE 3
-    // in RAD, the angle of the vision cone
-    #define ANT_VISION_CONE_ANGLE (PI / 3)
-
-    // Vector2 unit = Vector2Normalize(ant->velocity);
-    float heading = Vector2VectorToAngle(ant.velocity);
-
-    points[1] = ant.position + (Vector2AngleToVector(heading - (ANT_VISION_CONE_ANGLE/2)) * ANT_VISION_DISTANCE);
-    points[2] = ant.position + (Vector2AngleToVector(heading + (ANT_VISION_CONE_ANGLE/2)) * ANT_VISION_DISTANCE);
-
-    return points;
+// never returns a value over 2
+inline float pheromone_activator_function(float x) {
+    if (x <= 0) return 0;
+    if (x <= 1) return x;
+    return (-1/x) + 2;
 }
 
 
-/* Go code i wrote once
-// https://www.sunshine2k.de/coding/java/TriangleRasterization/TriangleRasterization.html
-func Draw_Triangle[T Vector.Number](img *Image, p1, p2, p3 Vector.Vector2[T], c Color) {
-	v1 := Vector.Transform[T, int](p1)
-	v2 := Vector.Transform[T, int](p2)
-	v3 := Vector.Transform[T, int](p3)
+// for now just makes a force that directs the ant away from clusters of pheromone
+Vector2 ant_calculate_pheromone_direction(Map *map, Ant ant, bool debug_draw = false) {
+    // the cone was a bad idea, instead just get every-thing within a circle radius
 
-	sortVerticesAscendingByY := func() {
-		// bubble sort, i wish go had a better way to do this, like passing a function into the sort interface, (v1, v2, v3 used to be an array)
-		if v1.Y > v2.Y {
-			v1, v2 = v2, v1
-		}
-		if v2.Y > v3.Y {
-			v2, v3 = v3, v2
-		}
-		if v1.Y > v2.Y {
-			v1, v2 = v2, v1
-		}
+    #define ANT_VISION_RADIUS 3
 
-		if !(v1.Y <= v2.Y && v2.Y <= v3.Y) {
-			log.Fatalf("Did not sort vertex's correctly, got %v, %v, %v\n", v1, v2, v3)
-		}
-	}
-	sortVerticesAscendingByY()
+    Vector2 force = Vector2Zero();
 
-	draw_line := func(x0, x1, y int) {
-		if !(0 <= y && y < img.Height) {
-			return
-		}
-		for x := max(min(x0, x1), 0); x < min(max(x0, x1), img.Width); x++ {
-			img.put_pixel(x, y, c)
-		}
-	}
-	fillBottomFlatTriangle := func(v1, v2, v3 Vector.Vector2[int]) {
-		inv_slope_1 := float32(v2.X-v1.X) / float32(v2.Y-v1.Y)
-		inv_slope_2 := float32(v3.X-v1.X) / float32(v3.Y-v1.Y)
+    int start_x = floorf(ant.position.x - ANT_VISION_RADIUS);
+    int   end_x = ceilf (ant.position.x + ANT_VISION_RADIUS);
 
-		cur_x_1 := float32(v1.X)
-		cur_x_2 := float32(v1.X)
+    int start_y = floorf(ant.position.y - ANT_VISION_RADIUS);
+    int   end_y = ceilf (ant.position.y + ANT_VISION_RADIUS);
 
-		for scan_line_Y := v1.Y; scan_line_Y <= v2.Y; scan_line_Y++ {
-			draw_line(int(cur_x_1), int(cur_x_2), scan_line_Y)
-			cur_x_1 += inv_slope_1
-			cur_x_2 += inv_slope_2
-		}
-	}
-	fillTopFlatTriangle := func(v1, v2, v3 Vector.Vector2[int]) {
-		inv_slope_1 := float32(v3.X-v1.X) / float32(v3.Y-v1.Y)
-		inv_slope_2 := float32(v3.X-v2.X) / float32(v3.Y-v2.Y)
+    for (int y = start_y; y < end_y; y++) {
+        for (int x = start_x; x < end_x; x++) {
+            Vector2 pos = {(float)x, (float)y};
+            Vector2 center = pos + (Vector2){0.5, 0.5};
 
-		cur_x_1 := float32(v3.X)
-		cur_x_2 := float32(v3.X)
+            float dist_sqr = Vector2DistanceSqr(ant.position, center);
+            if (!(dist_sqr < ANT_VISION_RADIUS*ANT_VISION_RADIUS)) continue;
 
-		for scan_line_Y := v3.Y; scan_line_Y > v1.Y; scan_line_Y-- {
-			draw_line(int(cur_x_1), int(cur_x_2), scan_line_Y)
-			cur_x_1 -= inv_slope_1
-			cur_x_2 -= inv_slope_2
-		}
-	}
+            if (debug_draw) {
+                Color color = ColorAlpha(ORANGE, 0.3);
+                DrawRectangleV(pos * UNITS_TO_PIXELS, {UNITS_TO_PIXELS, UNITS_TO_PIXELS}, color);
+            }
 
-	if v2.Y == v3.Y {
-		fillBottomFlatTriangle(v1, v2, v3)
-	} else if v1.Y == v2.Y {
-		fillTopFlatTriangle(v1, v2, v3)
-	} else {
+            Cell *cell = get_cell_at_or_null(map, center);
+            if (!cell) continue;
 
-		// I did some rearranging here
-		v4 := Vector.Vector2[int]{
-			// X: int(float32(v1.X) + float32(v2.Y-v1.Y)/float32(v3.Y-v1.Y)*float32(v3.X-v1.X)),
-			X: (((v2.Y - v1.Y) * (v3.X - v1.X)) + (v1.X * (v3.Y - v1.Y))) / (v3.Y - v1.Y),
-			Y: v2.Y,
-		}
+            float active = pheromone_activator_function(cell->pheromone_level);
+            if (!active) continue;
 
-		fillBottomFlatTriangle(v1, v2, v4)
-		fillTopFlatTriangle(v2, v4, v3)
-	}
-}
-*/
+            float inv_dist = ANT_VISION_RADIUS - sqrtf(dist_sqr); // 1 / sqrtf(dist_sqr);
+            Vector2 direction = Vector2Normalize(center - ant.position);
 
-Vector2 AntCalculatePheromoneDirection(Map *map, Ant ant) {
-    Vector2 *cone = AntVisionCone(ant);
+            force -= (direction * active * inv_dist);
+        }
+    }
 
-    // get all squares intersecting with this
+    if (debug_draw) {
+        DrawCircleLinesV(ant.position * UNITS_TO_PIXELS, ANT_VISION_RADIUS*UNITS_TO_PIXELS, BLUE);
+    }
 
-
-    return Vector2();
+    return force;
 }
 
 

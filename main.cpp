@@ -5,69 +5,13 @@
 // #include "hashmap.h"
 #include "dynamic_array.h"
 
+#include "defines.h"
 #include "common.h"
 #include "raylib_extentions.h"
 
 #include "noise.cpp"
 #include "cells.cpp"
 #include "ant.cpp"
-
-
-
-// 10 units for every pixel, and just let the camera do its own thing
-#define UNITS_TO_PIXELS 10
-#define PIXELS_TO_UNITS (1.0f/UNITS_TO_PIXELS)
-
-
-#define FACTOR 60
-// in pixels
-#define WIDTH  (16 * FACTOR)
-// in pixels
-#define HEIGHT ( 9 * FACTOR)
-
-// in pixels
-#define FONT_SIZE 25
-
-// Image from Freeimages.com
-#define ANT_ART_PATH "Ant_clip_art_small.png"
-
-
-// in units
-#define SPAWNER_RADIUS 2.5
-// in units
-#define ANT_RADIUS 0.2
-// relative to size of ant image, just a random number
-#define ANT_SCALE (ANT_RADIUS/25.0f)
-
-
-// number of ants the spawner spawns
-#define SPAWNER_MAX_ANTS 400
-
-// How many ants the spawner spawns per second
-#define SPAWNER_ANTS_PER_SECOND 5
-#define TIME_TO_SPAWN (1.0f / SPAWNER_ANTS_PER_SECOND)
-
-// in units per second
-#define ANT_SPEED 3
-
-// how much the previous velocity is negated every second.
-// aka it add a backwards vector to the acceleration
-#define ANT_DRAG 0.9
-
-// vary the heading a little bit, in % of total circle
-#define ANT_HEADING_VARIANCE 50
-
-// TODO change the camera to fit this, not the box
-// in pixels, from the edge
-#define BOUNDING_BOX_PADDING 20
-
-// how many seconds until pheromone is half the amount it was
-#define PHEROMONE_HALF_LIFE_TIME 3
-#define PHEROMONE_DECAY_EIGENVALUE (1.0f/PHEROMONE_HALF_LIFE_TIME)
-// how much pheromone is placed per second
-#define PHEROMONE_PER_SECOND 1
-
-
 
 
 void key_toggle_setting(bool *setting, int key) {
@@ -114,6 +58,7 @@ int main(void) {
     bool move_spawner_with_mouse = false;
     bool debug_draw_ants = false;
     bool debug_draw_ant_positions = false;
+    bool debug_draw_ant_calculate_pheromone_direction = false;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -130,6 +75,7 @@ int main(void) {
 
             key_toggle_setting(&debug_draw_ants, KEY_N);
             key_toggle_setting(&debug_draw_ant_positions, KEY_B);
+            key_toggle_setting(&debug_draw_ant_calculate_pheromone_direction, KEY_V);
         }
 
 
@@ -235,6 +181,9 @@ int main(void) {
                 // add some drag force!
                 a -= (u * ANT_DRAG);
 
+                // run away from pheromones!
+                a += ant_calculate_pheromone_direction(&pheromone_map, *ant);
+
                 // v = u + at
                 Vector2 v = u + (a*t);
                 // s = ut + (1/2)at^2
@@ -255,7 +204,7 @@ int main(void) {
             // TODO do we cap this? or just let the decay do its thing
 
             // now the hard part... we need to get all the pheromones in a vision cone
-
+            // Vector2 d = ant_calculate_pheromone_direction(&pheromone_map, *ant);
         }
 
 
@@ -309,30 +258,12 @@ int main(void) {
                         // shows where it would be 1 sec in future, with no acc
                         DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + ant->velocity) * UNITS_TO_PIXELS, BLUE);
 
-                        Vector2 *cone = AntVisionCone(*ant);
-                        { // sort the points counter clockwise
-                            // 1. find the lowest y (bc way the screen renders)
-                            int low_y = 0;
-                            for (size_t i = 1; i < 3; i++) {
-                                if (cone[i].y < cone[low_y].y) low_y = i;
-                            }
-                            // 2. move lowest to front
-                            if (low_y) {
-                                Vector2 tmp = cone[0];
-                                cone[0] = cone[low_y];
-                                cone[low_y] = tmp;
-                            }
-                            // 3. now swap the one with the lowest x
-                            if (cone[2].x < cone[1].x) {
-                                Vector2 tmp = cone[1];
-                                cone[1] = cone[2];
-                                cone[2] = tmp;
-                            }
-                        }
-
-                        for (size_t j = 0; j < 3; j++) cone[j] *= UNITS_TO_PIXELS;
-                        DrawTriangle(cone[0], cone[1], cone[2], RED);
                     }
+                    if (debug_draw_ant_calculate_pheromone_direction) {
+                        Vector2 force = ant_calculate_pheromone_direction(&pheromone_map, *ant, true);
+                        DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + force) * UNITS_TO_PIXELS, GRAY);
+                    }
+
 
                     float rotation = Vector2VectorToAngle(ant->velocity);
                     rotation += PI/2; // extra 90 for rotating image
@@ -363,7 +294,7 @@ int main(void) {
             DrawText(text, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
 
             if (debug_draw_ant_positions) {
-                for (size_t i = 0; i < MIN(ant_spawner.count, 10); i++) {
+                for (u64 i = 0; i < MIN(ant_spawner.count, (u64)10); i++) {
                     Ant *ant = &ant_spawner.items[i];
 
                     const char *text = TextFormat("Ant: " VEC2_Fmt, VEC2_Arg(ant->position));
