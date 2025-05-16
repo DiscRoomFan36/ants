@@ -1,7 +1,7 @@
 //
 // ints.h - just some ints that are nice to have
 //
-// Fletcher M - 06/02/2025
+// Fletcher M - 21/03/2025
 //
 
 #ifndef INT_TYPES
@@ -21,8 +21,11 @@ typedef int8_t  s8;
 
 typedef u32 bool32;
 
-#define False (0)
-#define True  (1)
+typedef float  f32;
+typedef double f64;
+
+#define True  (0 == 0)
+#define False (0 != 0)
 
 
 #endif // INT_TYPES
