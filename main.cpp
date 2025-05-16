@@ -22,19 +22,19 @@ void key_toggle_setting(bool *setting, int key) {
 int main(void) {
     // setup environment
 
-    Map pheromone_map = {};
+    Ant_Spawner ant_spawner = {};
 
     // make sure this is in whole units
-    Rectangle bounding_box = {
+    ant_spawner.bounding_box = {
         0, 0,
         (int) (WIDTH  * PIXELS_TO_UNITS),
         (int) (HEIGHT * PIXELS_TO_UNITS),
-    };
+    },
 
-    Ant_Spawner ant_spawner = {};
+    // just put it in the center
     ant_spawner.position = {
-        bounding_box.width  / 2,
-        bounding_box.height / 2,
+        ant_spawner.bounding_box.width  / 2,
+        ant_spawner.bounding_box.height / 2,
     };
 
 
@@ -61,7 +61,7 @@ int main(void) {
     bool debug_draw_ant_calculate_pheromone_direction = false;
 
     while (!WindowShouldClose()) {
-        float dt = GetFrameTime();
+        f32 dt = GetFrameTime();
         // if the dt gets too big, dont freak out, just use the normal step
         if (dt > 0.25) dt = 1.0f/60.0f;
 
@@ -109,8 +109,8 @@ int main(void) {
 
 
         // handle pheromone evaporation
-        for (u64 i = 0; i < pheromone_map.chunks.count; i++) {
-            Chunk *chunk = &pheromone_map.chunks.items[i];
+        for (u64 i = 0; i < ant_spawner.pheromone_map.chunks.count; i++) {
+            Chunk *chunk = &ant_spawner.pheromone_map.chunks.items[i];
             for (u64 j = 0; j < CHUNK_X*CHUNK_Y; j++) {
                 Cell *cell = &chunk->cells[j];
 
@@ -142,70 +142,7 @@ int main(void) {
             da_append(&ant_spawner.ant_array, ant);
         }
 
-        // update ants!
-        for (size_t i = 0; i < ant_spawner.ant_array.count; i++) {
-            Ant *ant = &ant_spawner.ant_array.items[i];
-
-            // check if the ant is within the spawner, to remove it.
-            if (Vector2DistanceSqr(ant->position, ant_spawner.position) < SPAWNER_RADIUS*SPAWNER_RADIUS) {
-                // remove the ant with STAMP and remove, dec i
-                da_stamp_and_remove(&ant_spawner.ant_array, i);
-                i -= 1;
-                continue;
-            }
-
-            // -------------------------------------
-            //               Move Ant
-            // -------------------------------------
-            {
-                // THINK is this the place to put this? its only used in one place?
-                // but... im trying to remove ant stuff from the inner parts...
-                float random_noise = get_noise(&ant->noise, dt);
-
-                float t = dt;
-                Vector2 a = Vector2Zero();
-                Vector2 s0 = ant->position;
-                Vector2 u = ant->velocity;
-
-                // repel ants from the edge
-                if (s0.x                  < bounding_box.x)      { a.x += ANT_SPEED; }
-                if (s0.x + bounding_box.x > bounding_box.width)  { a.x -= ANT_SPEED; }
-                if (s0.y                  < bounding_box.y)      { a.y += ANT_SPEED; }
-                if (s0.y + bounding_box.y > bounding_box.height) { a.y -= ANT_SPEED; }
-
-                // give the ants some movement in the direction their already going,
-                float heading = Vector2VectorToAngle(u);
-                heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
-                a += Vector2AngleToVector(heading) * ANT_SPEED;
-
-                // add some drag force!
-                a -= (u * ANT_DRAG);
-
-                // run away from pheromones!
-                a += ant_calculate_pheromone_direction(&pheromone_map, *ant);
-
-                // v = u + at
-                Vector2 v = u + (a*t);
-                // s = ut + (1/2)at^2
-                Vector2 s = (u*t) + (a * (0.5*t*t));
-
-                ant->position += s;
-                ant->velocity = v;
-            }
-
-
-            // -------------------------------------
-            //           Pheromone stuff
-            // -------------------------------------
-
-            // the cell the ant is over.
-            Cell *cell = get_cell_at(&pheromone_map, ant->position);
-            cell->pheromone_level += PHEROMONE_PER_SECOND * dt;
-            // TODO do we cap this? or just let the decay do its thing
-
-            // now the hard part... we need to get all the pheromones in a vision cone
-            // Vector2 d = ant_calculate_pheromone_direction(&pheromone_map, *ant);
-        }
+        update_ants(&ant_spawner, dt);
 
 
         BeginDrawing();
@@ -213,7 +150,7 @@ int main(void) {
 
             BeginMode2D(camera);
 
-                Rectangle pixel_bb = bounding_box * UNITS_TO_PIXELS;
+                Rectangle pixel_bb = ant_spawner.bounding_box * UNITS_TO_PIXELS;
 
                 // draw bounding box and grid
                 DrawRectangleRoundedLines(pixel_bb, 0.1, 1, GOLD);
@@ -228,9 +165,9 @@ int main(void) {
                 }
 
                 // Draw Pheromones
-                for (u64 i = 0; i < pheromone_map.chunks.count; i++) {
-                    Chunk chunk = pheromone_map.chunks.items[i];
-                    Vector2i position = pheromone_map.positions.items[i];
+                for (u64 i = 0; i < ant_spawner.pheromone_map.chunks.count; i++) {
+                    Chunk chunk = ant_spawner.pheromone_map.chunks.items[i];
+                    Vector2i position = ant_spawner.pheromone_map.positions.items[i];
 
                     for (u64 j = 0; j < CHUNK_X*CHUNK_Y; j++) {
                         Cell cell = chunk.cells[j];
@@ -260,7 +197,7 @@ int main(void) {
 
                     }
                     if (debug_draw_ant_calculate_pheromone_direction) {
-                        Vector2 force = ant_calculate_pheromone_direction(&pheromone_map, *ant, true);
+                        Vector2 force = ant_calculate_pheromone_direction(&ant_spawner.pheromone_map, *ant, true);
                         DrawLineV(ant->position * UNITS_TO_PIXELS, (ant->position + force) * UNITS_TO_PIXELS, GRAY);
                     }
 
@@ -269,7 +206,6 @@ int main(void) {
                     rotation += PI/2; // extra 90 for rotating image
 
                     DrawTextureAt(ant_texture, ant->position * UNITS_TO_PIXELS, ANT_SCALE * UNITS_TO_PIXELS, rotation, RED);
-
                 }
 
 
@@ -278,14 +214,6 @@ int main(void) {
                 DrawCircleV(ant_spawner.position * UNITS_TO_PIXELS, SPAWNER_RADIUS * 0.9 * UNITS_TO_PIXELS, ORANGE);
 
             EndMode2D();
-
-            // {
-            //     Vector2 p1 = {WIDTH/2, 0};
-            //     Vector2 p2 = {0, HEIGHT};
-            //     Vector2 p3 = {WIDTH, HEIGHT};
-
-            //     DrawTriangle(p3, p1, p2, RED);
-            // }
 
 
             // draw debug text

@@ -21,18 +21,22 @@ typedef struct Ant {
     NoiseGenerator noise;
 } Ant;
 
-// thing that spawns ants, up to NUM_ANTS or something
+// thing that spawns ants, and 
 typedef struct Ant_Spawner {
     struct {
-        Ant *items;
-        u64 count;
-        u64 capacity;
+        Ant *items   = NULL;
+        u64 count    = 0;
+        u64 capacity = 0;
     } ant_array;
 
     // in units, where the spawner is located at
     Vector2 position;
     // in seconds
-    float last_spawn_time;
+    f32 last_spawn_time = 0;
+
+    // the area the ands can live in.
+    Rectangle bounding_box;
+    Map pheromone_map;
 } Ant_Spawner;
 
 
@@ -93,11 +97,69 @@ Vector2 ant_calculate_pheromone_direction(Map *map, Ant ant, bool debug_draw = f
 
 
 
+void update_ants(Ant_Spawner *spawner, f32 dt) {
+    // update ants!
+    for (size_t i = 0; i < spawner->ant_array.count; i++) {
+        Ant *ant = &spawner->ant_array.items[i];
 
-void update_ants(Ant_Spawner *spawner) {
-    assert(False && "TODO");
-}
+        // check if the ant is within the spawner, to remove it.
+        if (Vector2DistanceSqr(ant->position, spawner->position) < SPAWNER_RADIUS*SPAWNER_RADIUS) {
+            // remove the ant with STAMP and remove, dec i
+            da_stamp_and_remove(&spawner->ant_array, i);
+            i -= 1;
+            continue;
+        }
 
-void render_ants(Ant_Spawner *spawner) {
-    assert(False && "TODO");
+        // -------------------------------------
+        //               Move Ant
+        // -------------------------------------
+        {
+            // THINK is this the place to put this? its only used in one place?
+            // but... im trying to remove ant stuff from the inner parts...
+            float random_noise = get_noise(&ant->noise, dt);
+
+            float t = dt;
+            Vector2 a = Vector2Zero();
+            Vector2 s0 = ant->position;
+            Vector2 u = ant->velocity;
+
+            // repel ants from the edge
+            if (s0.x                           < spawner->bounding_box.x)      { a.x += ANT_SPEED; }
+            if (s0.x + spawner->bounding_box.x > spawner->bounding_box.width)  { a.x -= ANT_SPEED; }
+            if (s0.y                           < spawner->bounding_box.y)      { a.y += ANT_SPEED; }
+            if (s0.y + spawner->bounding_box.y > spawner->bounding_box.height) { a.y -= ANT_SPEED; }
+
+            // give the ants some movement in the direction their already going,
+            float heading = Vector2VectorToAngle(u);
+            heading += random_noise * PI * (ANT_HEADING_VARIANCE/100.0f);
+            a += Vector2AngleToVector(heading) * ANT_SPEED;
+
+            // add some drag force!
+            a -= (u * ANT_DRAG);
+
+            // run away from pheromones!
+            a += ant_calculate_pheromone_direction(&spawner->pheromone_map, *ant);
+
+            // v = u + at
+            Vector2 v = u + (a*t);
+            // s = ut + (1/2)at^2
+            Vector2 s = (u*t) + (a * (0.5*t*t));
+
+            ant->position += s;
+            ant->velocity = v;
+        }
+
+
+        // -------------------------------------
+        //           Pheromone stuff
+        // -------------------------------------
+
+        // the cell the ant is over.
+        Cell *cell = get_cell_at(&spawner->pheromone_map, ant->position);
+        cell->pheromone_level += PHEROMONE_PER_SECOND * dt;
+        // TODO do we cap this? or just let the decay do its thing
+
+        // now the hard part... we need to get all the pheromones in a vision cone
+        // Vector2 d = ant_calculate_pheromone_direction(&pheromone_map, *ant);
+    }
 }
