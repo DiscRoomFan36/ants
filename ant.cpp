@@ -23,9 +23,11 @@ typedef struct Ant {
 
 // thing that spawns ants, up to NUM_ANTS or something
 typedef struct Ant_Spawner {
-    Ant *items;
-    u64 count;
-    u64 capacity;
+    struct {
+        Ant *items;
+        u64 count;
+        u64 capacity;
+    } ant_array;
 
     // in units, where the spawner is located at
     Vector2 position;
@@ -90,3 +92,12 @@ Vector2 ant_calculate_pheromone_direction(Map *map, Ant ant, bool debug_draw = f
 }
 
 
+
+
+void update_ants(Ant_Spawner *spawner) {
+    assert(False && "TODO");
+}
+
+void render_ants(Ant_Spawner *spawner) {
+    assert(False && "TODO");
+}

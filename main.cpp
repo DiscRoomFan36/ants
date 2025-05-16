@@ -108,7 +108,7 @@ int main(void) {
         }
 
 
-        // handle pheromone
+        // handle pheromone evaporation
         for (u64 i = 0; i < pheromone_map.chunks.count; i++) {
             Chunk *chunk = &pheromone_map.chunks.items[i];
             for (u64 j = 0; j < CHUNK_X*CHUNK_Y; j++) {
@@ -129,7 +129,7 @@ int main(void) {
         while (ant_spawner.last_spawn_time > TIME_TO_SPAWN) {
             ant_spawner.last_spawn_time -= TIME_TO_SPAWN;
 
-            if (ant_spawner.count >= SPAWNER_MAX_ANTS) continue;
+            if (ant_spawner.ant_array.count >= SPAWNER_MAX_ANTS) continue;
 
             // spawn this ant around the spawner
             Vector2 spawn_vector = Vector2AngleToVector(randf() * 2 * PI);
@@ -139,17 +139,17 @@ int main(void) {
                 .noise = new_noise_generator(),
             };
 
-            da_append(&ant_spawner, ant);
+            da_append(&ant_spawner.ant_array, ant);
         }
 
         // update ants!
-        for (size_t i = 0; i < ant_spawner.count; i++) {
-            Ant *ant = &ant_spawner.items[i];
+        for (size_t i = 0; i < ant_spawner.ant_array.count; i++) {
+            Ant *ant = &ant_spawner.ant_array.items[i];
 
             // check if the ant is within the spawner, to remove it.
             if (Vector2DistanceSqr(ant->position, ant_spawner.position) < SPAWNER_RADIUS*SPAWNER_RADIUS) {
                 // remove the ant with STAMP and remove, dec i
-                da_stamp_and_remove(&ant_spawner, i);
+                da_stamp_and_remove(&ant_spawner.ant_array, i);
                 i -= 1;
                 continue;
             }
@@ -250,8 +250,8 @@ int main(void) {
 
 
                 // Draw ants
-                for (size_t i = 0; i < ant_spawner.count; i++) {
-                    Ant *ant = &ant_spawner.items[i];
+                for (size_t i = 0; i < ant_spawner.ant_array.count; i++) {
+                    Ant *ant = &ant_spawner.ant_array.items[i];
 
                     if (debug_draw_ants) {
                         DrawCircleV(ant->position * UNITS_TO_PIXELS, ANT_RADIUS * UNITS_TO_PIXELS, RED);
@@ -289,13 +289,13 @@ int main(void) {
 
 
             // draw debug text
-            const char *text = TextFormat("Num Ants %zu", ant_spawner.count);
+            const char *text = TextFormat("Num Ants %zu", ant_spawner.ant_array.count);
             int text_width = MeasureText(text, FONT_SIZE);
             DrawText(text, WIDTH - text_width - 10, 10, FONT_SIZE, GREEN);
 
             if (debug_draw_ant_positions) {
-                for (u64 i = 0; i < MIN(ant_spawner.count, (u64)10); i++) {
-                    Ant *ant = &ant_spawner.items[i];
+                for (u64 i = 0; i < MIN(ant_spawner.ant_array.count, (u64)10); i++) {
+                    Ant *ant = &ant_spawner.ant_array.items[i];
 
                     const char *text = TextFormat("Ant: " VEC2_Fmt, VEC2_Arg(ant->position));
                     int text_width = MeasureText(text, FONT_SIZE);
@@ -311,7 +311,7 @@ int main(void) {
     UnloadTexture(ant_texture);
     CloseWindow();
 
-    da_free(&ant_spawner);
+    da_free(&ant_spawner.ant_array);
 
     return 0;
 }
