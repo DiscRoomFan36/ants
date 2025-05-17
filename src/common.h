@@ -3,12 +3,16 @@
 #define COMMON_H_
 
 
-#include <stdlib.h>
+#define local static
+
+
+// I just like these ints.
+#include "ints.h"
+
 
 // Return a random float between 0 and 1
-float randf(void) {
-    return (float) rand() / (float) RAND_MAX;
-}
+float randf(void);
+
 
 #define MAX(a,b) \
    ({ __typeof__ (a) _a = (a); \
@@ -25,3 +29,16 @@ float randf(void) {
 
 
 #endif // COMMON_H_
+
+
+#ifdef COMMON_IMPLEMENTATION
+
+
+#include <stdlib.h>
+
+float randf(void) {
+    return (float) rand() / (float) RAND_MAX;
+}
+
+
+#endif // COMMON_IMPLEMENTATION

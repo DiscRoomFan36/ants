@@ -1,27 +1,22 @@
 
-#ifndef NOISE_CPP_
-#define NOISE_CPP_
-
+#include "noise.h"
 
 #include "common.h"
 
-float clamp(float x, float lowerlimit = 0.0f, float upperlimit = 1.0f) {
+
+local float clamp(float x, float lowerlimit = 0.0f, float upperlimit = 1.0f) {
     if (x < lowerlimit) return lowerlimit;
     if (x > upperlimit) return upperlimit;
     return x;
 }
 
-float smoothstep(float edge0, float edge1, float x) {
+local float smoothstep(float edge0, float edge1, float x) {
     // Scale, and clamp x to 0..1 range
     x = clamp((x - edge0) / (edge1 - edge0));
 
     return x * x * (3.0f - 2.0f * x);
 }
 
-typedef struct NoiseGenerator {
-    float prev, next;
-    float t;
-} NoiseGenerator;
 
 NoiseGenerator new_noise_generator(void) {
     NoiseGenerator result = {};
@@ -50,5 +45,3 @@ float get_noise(NoiseGenerator *noise, float dt) {
     return noise->prev + smoothstep(0, 1, noise->t) * (noise->next - noise->prev);
 }
 
-
-#endif // NOISE_CPP_

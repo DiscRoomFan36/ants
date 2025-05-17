@@ -1,47 +1,20 @@
 
+#include "ant.h"
+
+#include "dynamic_array.h"
 #include "ints.h"
 
 #include "defines.h"
 #include "common.h"
 #include "raylib_extentions.h"
 
-#include "cells.cpp"
-#include "noise.cpp"
+#include "cells.h"
+#include "noise.h"
 
-
-typedef struct Ant {
-    // in units
-    Vector2 position;
-    // in units per second
-    Vector2 velocity;
-
-    // TODO should this be here? all the ants want some noise,
-    // but one per ant? and on every single struct? Hmm...
-    // maybe only make so Generator, and randomly give them out with batching
-    NoiseGenerator noise;
-} Ant;
-
-// thing that spawns ants, and 
-typedef struct Ant_Spawner {
-    struct {
-        Ant *items   = NULL;
-        u64 count    = 0;
-        u64 capacity = 0;
-    } ant_array;
-
-    // in units, where the spawner is located at
-    Vector2 position;
-    // in seconds
-    f32 last_spawn_time = 0;
-
-    // the area the ands can live in.
-    Rectangle bounding_box;
-    Map pheromone_map;
-} Ant_Spawner;
 
 
 // never returns a value over 2
-inline float pheromone_activator_function(float x) {
+local inline float pheromone_activator_function(float x) {
     if (x <= 0) return 0;
     if (x <= 1) return x;
     return (-1/x) + 2;
@@ -49,7 +22,7 @@ inline float pheromone_activator_function(float x) {
 
 
 // for now just makes a force that directs the ant away from clusters of pheromone
-Vector2 ant_calculate_pheromone_direction(Map *map, Ant ant, bool debug_draw = false) {
+Vector2 ant_calculate_pheromone_direction(Map *map, Ant ant, bool debug_draw) {
     // the cone was a bad idea, instead just get every-thing within a circle radius
 
     #define ANT_VISION_RADIUS 3

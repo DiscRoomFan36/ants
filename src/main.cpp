@@ -1,20 +1,23 @@
+
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "ints.h"
-// #include "hashmap.h"
-#include "dynamic_array.h"
 
 #include "defines.h"
 #include "common.h"
 #include "raylib_extentions.h"
 
-#include "noise.cpp"
-#include "cells.cpp"
-#include "ant.cpp"
+
+#include "ints.h"
+#include "dynamic_array.h"
 
 
-void key_toggle_setting(bool *setting, int key) {
+#include "noise.h"
+#include "cells.h"
+#include "ant.h"
+
+
+local void key_toggle_setting(bool *setting, int key) {
     if (IsKeyPressed(key)) *setting = !(*setting);
 }
 
